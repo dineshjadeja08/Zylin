@@ -12,6 +12,7 @@ import os
 from contextlib import asynccontextmanager
 
 from services.llm.brain import ZylinBrain, ConversationResponse
+from api.twilio_webhook import router as twilio_router
 
 # App metadata
 APP_TITLE = "Zylin AI Receptionist"
@@ -83,6 +84,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Twilio webhook router
+app.include_router(twilio_router)
 
 
 # Exception handlers
