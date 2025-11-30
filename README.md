@@ -2,20 +2,32 @@
 
 **Intelligent phone assistant for small and medium businesses**
 
-Zylin is an AI-powered receptionist that handles incoming phone calls, answers FAQs, books appointments, and escalates urgent matters to business owners. Built with FastAPI, OpenAI GPT-4, and Twilio.
+Zylin is an AI-powered receptionist that handles incoming phone calls with **real-time audio streaming**, answers FAQs, books appointments, and escalates urgent matters to business owners. Built with FastAPI, OpenAI GPT-4, Deepgram, and Twilio.
 
 ---
 
-## 🎯 Features (MVP)
+## 🎯 Features
 
-- ✅ **Text-Only LLM Brain** - Intent classification & natural conversation
-- ✅ **FAQ Handling** - Answers questions about hours, services, pricing
-- ✅ **Appointment Booking** - Collects customer details and schedules appointments
-- ✅ **Urgent Escalation** - Detects emergencies and complaints, alerts owner
-- 🚧 **ASR Integration** - Speech-to-text (coming soon)
-- 🚧 **TTS Integration** - Text-to-speech (coming soon)
-- 🚧 **Twilio Phone Integration** - Real phone call handling (coming soon)
-- 🚧 **WhatsApp Notifications** - Confirmations and alerts (coming soon)
+### ✅ Core Features (Complete)
+- **Real-Time Streaming** - Low-latency bi-directional audio (<3s response time)
+- **LLM Brain** - GPT-4 powered intent classification & natural conversation
+- **FAQ Handling** - Answers questions about hours, services, pricing
+- **Appointment Booking** - Collects customer details and schedules appointments
+- **Urgent Escalation** - Detects emergencies and complaints, alerts owner
+- **ASR Integration** - Deepgram streaming + OpenAI Whisper (batch)
+- **TTS Integration** - OpenAI TTS with 6 voice options
+- **Twilio Integration** - WebSocket streaming + legacy recording modes
+- **WhatsApp Notifications** - Booking confirmations and urgent alerts
+- **Call Logging** - Complete transcripts, analytics, and metrics
+
+### 🎉 NEW: Real-Time Streaming
+- **WebSocket-based** audio streaming via Twilio Media Streams
+- **Sub-3-second latency** for natural conversations
+- **Interruption handling** - Caller can interrupt Zylin
+- **Latency tracking** - Monitor performance metrics per call
+- **Mock mode** - Test without API costs
+
+See [`docs/STREAMING_COMPLETE.md`](docs/STREAMING_COMPLETE.md) for details.
 
 ---
 
@@ -43,39 +55,64 @@ pip install -r requirements.txt
 
 # Set up environment variables
 Copy-Item .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env and add your API keys:
+# - OPENAI_API_KEY (required)
+# - DEEPGRAM_API_KEY (optional, for real-time ASR)
+# - TWILIO_* credentials (optional, for phone calls)
 ```
 
 ### Run the API Server
 
+#### Option 1: Mock Mode (No API Costs)
+
 ```powershell
-# Start FastAPI server
+# Use mock streaming services for testing
+$env:USE_MOCK_STREAMING = "true"
 python main.py
 
 # Server runs at http://localhost:8000
 # API docs at http://localhost:8000/docs
 ```
 
-### Test the LLM Brain
+#### Option 2: Production Mode (Real-Time Streaming)
 
 ```powershell
-# Interactive testing
+# Requires OPENAI_API_KEY and DEEPGRAM_API_KEY in .env
+python main.py
+
+# WebSocket endpoint: ws://localhost:8000/media-stream
+# For Twilio: wss://your-domain.com/media-stream
+```
+
+### Test the System
+
+```powershell
+# 1. Test LLM Brain
 python services/llm/test_harness.py
 
-# Automated test suite
-python services/llm/test_harness.py test
+# 2. Test Streaming Pipeline
+python -m pytest tests/test_streaming.py -v
+
+# 3. Run Full Demo
+python tests/demo.py
+
+# 4. Test All Components
+python -m pytest tests/ -v
 ```
 
 ---
 
 ## 📡 API Endpoints
 
-### Health Check
+### REST API
+
+#### Health Check
 ```http
 GET /health
+GET /
 ```
 
-### Process Conversation
+#### Process Conversation (Text)
 ```http
 POST /conversation
 Content-Type: application/json
@@ -103,16 +140,43 @@ Content-Type: application/json
 }
 ```
 
-### Get Business Info
+#### Twilio Webhooks
 ```http
-GET /business
+POST /api/twilio/voice          # Incoming calls (streaming)
+POST /api/twilio/voice-legacy   # Incoming calls (recording)
+POST /api/twilio/recording/{id} # Recording received
+POST /api/twilio/status         # Call status updates
 ```
 
-### Generate Conversation Summary
-```http
-POST /conversation/summary
-Content-Type: application/json
+### WebSocket API
 
+#### Real-Time Audio Streaming
+```
+ws://localhost:8000/media-stream
+wss://your-domain.com/media-stream  (production)
+```
+
+Handles Twilio Media Streams for bidirectional audio.
+
+**Message Format:**
+```json
+// Start
+{"event": "start", "streamSid": "STxxx", "start": {...}}
+
+// Audio chunk (incoming)
+{"event": "media", "media": {"payload": "base64-mulaw"}}
+
+// Audio chunk (outgoing)
+{"event": "media", "streamSid": "STxxx", "media": {"payload": "base64-mulaw"}}
+
+// Stop
+{"event": "stop", "streamSid": "STxxx"}
+```
+
+### Other Endpoints
+```http
+GET /business                    # Business context
+POST /conversation/summary       # Generate summary
 [
   {"role": "user", "content": "Message 1"},
   {"role": "assistant", "content": "Response 1"}
@@ -144,31 +208,61 @@ pytest -v
 
 ```
 Zylin/
-├── main.py                    # FastAPI application
-├── requirements.txt           # Python dependencies
-├── .env.example              # Environment variables template
-├── .gitignore                # Git ignore rules
+├── main.py                         # FastAPI app + WebSocket endpoint
+├── requirements.txt                # Python dependencies
+├── .env.example                   # Environment variables template
+├── .gitignore                     # Git ignore rules
+│
+├── api/
+│   └── twilio_webhook.py          # Twilio webhook handlers
 │
 ├── docs/
-│   └── brain.md              # LLM brain design documentation
+│   ├── brain.md                   # LLM brain design
+│   ├── streaming_plan.md          # Streaming architecture (original plan)
+│   └── STREAMING_COMPLETE.md      # Streaming implementation guide
+│
+├── infra/
+│   └── twilio-config.md           # Twilio setup guide
 │
 ├── services/
 │   ├── llm/
-│   │   ├── brain.py          # Core LLM brain logic
-│   │   ├── test_harness.py   # Interactive testing tool
-│   │   └── README.md         # LLM service documentation
+│   │   ├── brain.py               # GPT-4 conversation engine
+│   │   └── test_harness.py        # Interactive testing
 │   │
-│   ├── asr/                  # Speech-to-text (coming soon)
-│   ├── tts/                  # Text-to-speech (coming soon)
-│   ├── orchestrator/         # Conversation orchestrator (coming soon)
-│   ├── bookings/             # Booking management (coming soon)
-│   └── notifications/        # WhatsApp notifications (coming soon)
+│   ├── asr/
+│   │   ├── transcribe.py          # Whisper + Deepgram streaming ASR
+│   │   └── test_asr.py            # ASR tests
+│   │
+│   ├── tts/
+│   │   ├── synthesize.py          # OpenAI TTS + streaming
+│   │   └── test_tts.py            # TTS tests
+│   │
+│   ├── orchestrator/
+│   │   ├── session_manager.py     # Multi-turn conversation manager
+│   │   └── streaming_pipeline.py  # Real-time streaming orchestrator
+│   │
+│   ├── bookings/
+│   │   └── store.py               # SQLite booking storage
+│   │
+│   ├── notifications/
+│   │   └── whatsapp.py            # Twilio WhatsApp messaging
+│   │
+│   ├── logging/
+│   │   └── log_store.py           # Call logging & analytics
+│   │
+│   └── utils/
+│       └── audio_codec.py         # μ-law encoding/decoding
+│
+├── scripts/
+│   └── daily_report.py            # Analytics reports
 │
 └── tests/
-    ├── conftest.py           # Pytest configuration
-    ├── test_brain.py         # LLM brain unit tests
-    ├── test_api.py           # API integration tests
-    └── test_llm_brain.md     # Test cases documentation
+    ├── conftest.py                # Pytest configuration
+    ├── test_brain.py              # LLM tests
+    ├── test_api.py                # API tests
+    ├── test_e2e.py                # End-to-end tests
+    ├── test_streaming.py          # Streaming pipeline tests
+    └── demo.py                    # Full system demo
 ```
 
 ---
@@ -180,9 +274,22 @@ Zylin/
 Create a `.env` file with:
 
 ```env
-# OpenAI Configuration
+# OpenAI Configuration (Required)
 OPENAI_API_KEY=sk-your-key-here
 OPENAI_MODEL=gpt-4-turbo-preview
+
+# Deepgram Configuration (Optional - for real-time ASR)
+DEEPGRAM_API_KEY=your-deepgram-key
+
+# Streaming Configuration
+USE_MOCK_STREAMING=false           # true for testing without API costs
+PUBLIC_URL=https://your-domain.com # Your public URL for webhooks
+
+# Twilio Configuration (Optional - for phone integration)
+TWILIO_ACCOUNT_SID=ACxxx
+TWILIO_AUTH_TOKEN=xxx
+TWILIO_PHONE_NUMBER=+1234567890
+TWILIO_WHATSAPP_NUMBER=+14155238886
 
 # Business Information
 BUSINESS_NAME=Your Business Name

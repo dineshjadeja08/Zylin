@@ -49,8 +49,59 @@ async def handle_incoming_call(
     https://your-domain.com/api/twilio/voice
     
     TwiML response tells Twilio what to do with the call.
+    
+    NOTE: This now uses <Stream> for real-time audio instead of <Record>.
+    To use the old recording-based approach, see handle_incoming_call_legacy below.
     """
     print(f"\n📞 Incoming call from {From} (SID: {CallSid})")
+    
+    # Store call info for WebSocket handler
+    session_mapping[CallSid] = {
+        "caller_phone": From,
+        "call_sid": CallSid,
+        "session_id": None  # Will be set by WebSocket handler
+    }
+    
+    # Get public URL from environment or request
+    # In production, this should be your domain
+    public_url = os.getenv("PUBLIC_URL", "wss://your-domain.com")
+    
+    # Ensure it's a WebSocket URL
+    if public_url.startswith("http://"):
+        public_url = public_url.replace("http://", "ws://")
+    elif public_url.startswith("https://"):
+        public_url = public_url.replace("https://", "wss://")
+    
+    stream_url = f"{public_url}/media-stream"
+    
+    # TwiML response to open Media Stream for real-time audio
+    twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Connect>
+        <Stream url="{stream_url}">
+            <Parameter name="callSid" value="{CallSid}" />
+            <Parameter name="callerPhone" value="{From}" />
+        </Stream>
+    </Connect>
+</Response>"""
+    
+    return Response(content=twiml_response, media_type="application/xml")
+
+
+@router.post("/voice-legacy")
+async def handle_incoming_call_legacy(
+    CallSid: str = Form(...),
+    From: str = Form(...),
+    To: str = Form(...),
+    CallStatus: str = Form(...)
+):
+    """
+    Legacy handler using recording-based approach.
+    
+    Use this endpoint if you want the old record-then-process behavior
+    instead of real-time streaming.
+    """
+    print(f"\n📞 Incoming call (LEGACY) from {From} (SID: {CallSid})")
     
     # Create session for this call
     session = orchestrator.create_session(caller_phone=From)

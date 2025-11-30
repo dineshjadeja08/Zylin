@@ -11,3 +11,8 @@ aiofiles==23.2.1
 pytest==7.4.3
 pytest-asyncio==0.21.1
 black==23.12.0
+
+# Real-time streaming dependencies
+deepgram-sdk==3.2.0
+websockets==12.0
+audioop-lts==0.2.1
