@@ -1,0 +1,1 @@
+"""Initialize bookings service package."""
